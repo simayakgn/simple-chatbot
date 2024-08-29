@@ -1,34 +1,49 @@
-from transformers import pipeline
-
-# Load a pre-trained text-generation model
-chatbot = pipeline("text-generation", model="microsoft/DialoGPT-medium")
+from flask import Flask, request, jsonify, render_template
+import joblib
 
 
-def chat():
-    print("Chatbot: Hello! How can I help you today?")
-    chat_history = ""
+app = Flask(__name__)
 
-    while True:
-        user_input = input("You: ")
-        if user_input.lower() in ['exit', 'quit', 'bye']:
-            print("Chatbot: Goodbye!")
-            break
+# Load the trained model
+model_file = 'model/model.pkl'
+vect_file = 'model/vect.pkl'
+  # Update with your path if different
 
-        # Append user input to chat history
-        chat_history += f"User: {user_input}\n"
+model = joblib.load(model_file)
+vect = joblib.load(vect_file)
 
-        # Generate a response
-        response = chatbot(chat_history, max_length=1000, pad_token_id=50256)[0]['generated_text']
+def find_response(user_input):
+    user_input = user_input.lower()
+    model['user_input_lower'] = model['user_input'].str.lower()
 
-        # Extract the chatbot's response from the generated text
-        chatbot_response = response.split('\n')[-1].replace("Chatbot: ", "")
+    # Look for an exact or partial match in user inputs
+    for idx, row in model.iterrows():
+        if user_input in row['user_input_lower']:
+            return row['bot_respond']
 
-        # Print the response
-        print(f"Chatbot: {chatbot_response}")
+@app.route('/')
+def index():
+    return render_template('message.html')
 
-        # Update chat history with chatbot's response
-        chat_history += f"Chatbot: {chatbot_response}\n"
+@app.route('/predict', methods=['POST'])
+def predict():
+    data = request.get_json(force=True)
+    user_input = data['input']
 
+    print('user_input')
+    print(user_input)
 
-if __name__ == "__main__":
-    chat()
+    # Generate a prediction using the loaded model
+    # Assuming the input is already preprocessed as needed by your model
+
+    inp = vect.transform([user_input])
+
+    prediction = model.predict(inp)[0]
+
+    print('prediction')
+    print(prediction)
+
+    return jsonify({"prediction": [prediction]})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
